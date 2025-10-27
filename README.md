@@ -1,32 +1,4 @@
-Entwicklung einer Architektur zum Federated Learning zur
-
-Verhinderung von Datenmanipulation
-
-#### Bachelorarbeit
-
-```
-Informatik und Wirtschaftsinformatik
-```
-```
-Technische Hochschule Würzburg-Schweinfurt
-```
-eingereicht bei:
-
-Prof. Dr. Sebastian Biedermann
-
-eingereicht von:
-
-Mario von Bassen ( 6120069 )
-
-Studiengang: Bachelor of Science E-Commerce (B.Sc.)
-
-Anschrift: Gressengasse 1, 97070, Würzburg
-
-Telefon: 01577 /
-
-E-Mail: mario.vonbassen@student.thws.com
-
-Würzburg, den 08.08.
+Entwicklung einer Architektur zum Federated Learning zur Verhinderung von Datenmanipulation
 
 
 ## Inhaltsverzeichnis
@@ -5015,16 +4987,5 @@ https://arXiv.org/abs/2405.08698 (abgerufen: 07.07.2024).
 [81] G. Damaskinos, A. Guirguis und S. Rouault, „krum“, GitHub, [Online]. Verfügbar:
 https://github.com/LPD-EPFL/AggregaThor/blob/master/aggregators/krum.py (abgerufen am
 11.05.2024).
-
-
-# Eidesstaatliche Erklärung
-
-Hiermit versichere ich, dass ich die vorgelegte Bachelorarbeit selbstständig verfasst und noch
-nichtanderweitig zu Prüfungszwecken vorgelegt habe. Alle benutzten Quellen und Hilfsmittel sind
-angegeben, wörtliche und sinngemäße Zitate wurden als solche gekennzeichnet.
-
-Würzburg, den 08.08.2024
-
-Mario von Bassen
 
 
