@@ -1,3 +1,214 @@
+# SickurityFLee
+
+Ein Proof-of-Concept-System für sicheres, manipulationsresistentes Federated Learning mit einer Ethereum-Blockchain-Integration zur Absicherung von Teilnehmern, Beiträgen und globalen Modell-Updates. 
+
+---
+
+## Ziel
+
+Zentrales Training von KI-Modellen ist in vielen Szenarien nicht möglich, weil sensible oder vertrauliche Daten (z. B. Patientendaten oder sicherheitskritische Logdaten) nicht geteilt werden dürfen – etwa aus rechtlichen (DSGVO) oder regulatorischen Gründen. Gleichzeitig ist Föderiertes Lernen (FL) anfällig für Angriffe wie Label Flipping, Datenvergiftung (Poisoning), Backdoor-Injektionen, Sybil-Clients oder Free-Rider.
+
+SickurityFLee adressiert diese beiden Probleme gleichzeitig:
+
+- Daten bleiben lokal beim Client und werden niemals zentral hochgeladen. :contentReference[oaicite:1]{index=1}  
+- Ein gemeinsames Modell wird dennoch über Föderiertes Lernen (FedAvg) trainiert. :contentReference[oaicite:2]{index=2}  
+- Jeder Beitrag ist kryptografisch nachvollziehbar, abgesichert und ökonomisch gebondet über einen Smart Contract auf Ethereum.   
+- Bösartige Teilnehmer werden früh erkannt und ausgeschlossen, bevor deren Gewichte ins globale Modell einfließen. 
+
+---
+
+## High-Level-Idee
+
+Ein föderiertes Lernsystem, das:
+1. Teilnehmer eindeutig identifiziert,  
+2. Beiträge über Blockchain registriert und mit einer Kaution absichert,  
+3. Modell- und Datenintegrität kryptografisch überprüft,  
+4. bösartige Clients aktiv aussortiert,  
+bevor deren Updates das globale Modell beeinflussen. 
+
+---
+
+## Systemkomponenten
+
+### 1. Gateway-Server
+Der Gateway-Server ist der Eintrittspunkt in das System und existiert pro Umgebung genau einmal. :contentReference[oaicite:6]{index=6}  
+Aufgaben:
+- Registrierung neuer Teilnehmer (Clients und Aggregate-Server)  
+- Vergabe und Prüfung von Identitäten (Public Keys, Zertifikate)  
+- Erstellen eines Smart Contracts pro Teilnehmer auf der Blockchain  
+- Einfordern einer Kaution (Stake) in Ether – bei Betrug kann diese einbehalten werden  
+- Whitelist-/Blacklist-Management (wer darf teilnehmen, wer nicht)  
+- Übergabe sicherer Verbindungsparameter (z. B. Session Keys) 
+
+Damit verhindert der Gateway-Server Sybil-Angriffe (eine Person gibt sich als viele Clients aus) und erschwert Free-Riding. Jeder Akteur ist eindeutig identifizierbar und wirtschaftlich gebondet. 
+
+### 2. Aggregate-Server
+Der Aggregate-Server koordiniert das Föderierte Lernen. :contentReference[oaicite:9]{index=9}  
+Aufgaben:
+- Initialisieren des globalen Modells  
+- Verteilen des globalen Modells an validierte Clients  
+- Einsammeln der lokalen Modell-Updates  
+- Aggregation (FedAvg) der eingehenden Updates  
+- Aktualisieren und erneutes Verteilen des globalen Modells  
+- Schreiben der aktuellen globalen Modell-Hashes auf die Blockchain (Auditierbarkeit) 
+
+### 3. Client
+Der Client ist z. B. ein Unternehmen, ein Krankenhaus oder eine Organisationseinheit mit eigenen sensiblen Daten.   
+Aufgaben:
+- Erhält das aktuelle globale Modell  
+- Trainiert lokal auf den eigenen Daten (keine Weitergabe der Rohdaten)  
+- Schickt nur Modell-Updates zurück  
+- Muss sich vor Teilnahme validieren lassen (siehe unten), um nachzuweisen, dass wirklich mit den erwarteten Daten und korrekt trainiert wurde 
+
+### 4. Blockchain / Smart Contracts
+Für jeden Teilnehmer wird ein eigener Smart Contract auf Ethereum angelegt. :contentReference[oaicite:13]{index=13}  
+Der Contract speichert:
+- die Identität des Teilnehmers,  
+- die hinterlegte Kaution (Stake),  
+- Hashes der eingesendeten Modell-Updates,  
+- Hashes des jeweils globalen Modells jeder Trainingsrunde. 
+
+Effekte:
+- Beiträge sind eindeutig zuordenbar, auditierbar und nachträglich beweisbar.  
+- Manipulation des globalen Modells kann erkannt werden (Abgleich mit dem on-chain gespeicherten Hash).  
+- Teilnehmer mit bösartigem Verhalten können bestraft werden, indem der Stake einbehalten wird. 
+
+---
+
+## Sicherheits- und Vertrauens-Mechanismen
+
+### 1. Gesicherter Verbindungsaufbau
+Zwischen Gateway-Server und Aggregate-Server (und später auch zwischen Aggregate-Server und Client) läuft ein mehrstufiger Kryptoprozess:  
+- RSA-basierter Austausch von Public Keys und signierten Zertifikaten  
+- gegenseitige Verifikation der Identität  
+- Aushandeln eines gemeinsamen AES-Session-Keys  
+- anschließende verschlüsselte Kommunikation über AES (CFB) mit Integritätsschutz über HMAC 
+
+Der Gateway-Server erstellt außerdem eine zufällige Reconnection-ID, damit der Aggregate-Server nach einem Verbindungsabbruch sicher wieder andocken kann, ohne komplett neu registriert werden zu müssen. :contentReference[oaicite:17]{index=17}
+
+### 2. Server Model Encoding (geschützte Modellverteilung)
+Das globale Modell verlässt den Aggregate-Server nie ungeschützt. Du definierst hierfür ein eigenes zweistufiges Verschlüsselungsverfahren namens „Server Model Encoding“. 
+
+Ablauf:
+1. Das globale Modell (Architektur und Gewichte) wird serialisiert und gehasht (SHA-256 / SHA3-256). Der Hash dient als Integritätsanker.   
+2. Dieses Modellpaket wird mit einem zufällig generierten Server Model Decode Key symmetrisch verschlüsselt (Fernet, basiert auf AES-CBC + HMAC). Der Key bleibt beim Aggregate-Server.   
+3. Das Ergebnis wird erneut verschlüsselt, und der äußere Schlüssel wird asymmetrisch (Public Key des Gateway-Servers) gesichert.  
+4. Nur validierte Clients erhalten später den nötigen Decode Key, um das Modell tatsächlich zu nutzen. Die Blockchain speichert den Hash des globalen Modells, um Manipulation nachweisen zu können.   
+
+Wichtig:
+- Der Gateway-Server kann das Modell nicht einfach im Klartext einsehen.  
+- Ein Client kann im Streitfall nachweisen, welches Modell er erhalten hat (Hash-Vergleich mit der Blockchain).
+
+### 3. Client-Validierung (Manipulations-Check vor Teilnahme)
+Bevor ein Client Updates ins globale Modell einspeisen darf, muss er sich validieren lassen. Das ist einer der wichtigsten Sicherheitsbausteine. 
+
+Ablauf:
+1. Der Client wird über den Gateway-Server registriert, inklusive Blockchain-Eintrag, Public Key, IP-Adresse und Stake.   
+2. Der Aggregate-Server prüft in der Blockchain, ob der Client legitim ist.  
+3. Der Aggregate-Server erzeugt eine Encapsulate Class:
+   - enthält Hashes der erwarteten Trainingsdaten des Clients,  
+   - enthält den Hash des globalen Modells,  
+   - enthält feste Trainingsparameter (Batch Size, Epochen usw.).  
+   Diese Felder sind für den Client nicht veränderbar. :contentReference[oaicite:24]{index=24}  
+4. Der Client führt lokal einen definierten Trainings-/Evaluationslauf mit diesen Parametern durch.  
+5. Der Client verschlüsselt seine Ergebnisse mit dem Public Key des Aggregate-Servers und sendet sie zurück. :contentReference[oaicite:25]{index=25}  
+6. Der Aggregate-Server vergleicht die gemeldete Performance (z. B. Accuracy, Recall) mit Referenzwerten.  
+   - Weichen die Werte zu stark ab (in der Arbeit z. B. mehr als etwa 3 Prozentpunkte Global Model Accuracy Differenz), wird der Client als bösartig eingestuft und von der Aggregation ausgeschlossen. :contentReference[oaicite:26]{index=26}  
+
+Effekte:
+- Label-Flipping-Clients (z. B. vertauschte Labels 1 ↔ 9) werden erkannt, bevor ihre Updates in das globale Modell eingehen.   
+- Free-Rider (Clients, die gar nicht oder auf falschen Daten trainieren) fallen ebenfalls durch.  
+- Das reduziert die Angriffsfläche deutlich.
+
+---
+
+## Evaluation
+
+Für die Evaluierung wurde ein Convolutional Neural Network auf MNIST genutzt. Das Modell basiert konzeptionell auf einem Setup aus der Literatur („Study of Attacks on Federated Learning“ von Cheng et al.) und wurde nach TensorFlow portiert (Conv2D → BatchNorm → ReLU → Pooling → Dense(10)). :contentReference[oaicite:28]{index=28}
+
+### Baseline ohne Schutz
+Ohne die Sicherheitsmechanismen von SickurityFLee reichen bereits moderate Poisoning-Raten (z. B. ungefähr 14 Prozent kompromittierte Clients), um bestimmte Klassen nahezu vollständig zu zerstören. In einem Lauf erreicht eine angegriffene Klasse praktisch 0.0 Klassengenauigkeit, und die globale Accuracy über alle Durchgänge liegt nur noch bei etwa 0.77. Das zeigt, wie stark Label Flipping ein föderiertes Modell beschädigen kann. :contentReference[oaicite:29]{index=29}
+
+### SickurityFLee aktiviert
+Mit allen Sicherheitsmechanismen aktiv (Blockchain, Stake, Encapsulate Class, Modellverschlüsselung, Ausschluss bösartiger Clients) wurde mit K = 7 Clients getestet. Die Poisoning Rate wurde erhöht (ca. 14,9 %, 28,5 %, 42,8 %, 57,1 %). Hardware: i7-9750H, GTX 1650, 32 GB RAM. 
+
+Auszug aus den Ergebnissen (Tabelle 10.0):  
+- Poisoning Rate ~14,9 %:  
+  - Global Model Accuracy (GMA): ~0.9912  
+  - Klassen-Genauigkeiten (z. B. GA1C, GA9C): ~0.99  
+- Poisoning Rate ~28,5 %:  
+  - GMA: ~0.9897  
+- Erst ab sehr hohen Raten (42,8 % kompromittierte Clients und mehr) bricht das System deutlich ein. :contentReference[oaicite:31]{index=31}
+
+Interpretation:
+- Bei realistischen Angriffsszenarien (rund 15–30 % bösartige Clients) hält SickurityFLee das globale Modell praktisch stabil bei ~99 % Accuracy.  
+- Ein unsicheres Federated-Learning-System ohne diese Schutzmaßnahmen würde in denselben Szenarien bereits deutlich kollabieren. 
+
+---
+
+## Trainings- und Rundenablauf (vereinfacht)
+
+1. Onboarding & Registrierung  
+   - Gateway-Server und Aggregate-Server tauschen Zertifikate und Schlüssel.  
+   - AES-Session-Key wird vereinbart.  
+   - Beide werden auf der Blockchain registriert und hinterlegen ihren Stake.  
+   - Clients durchlaufen denselben Prozess.   
+
+2. Globales Modell bereitstellen  
+   - Der Aggregate-Server serialisiert, hasht und verschlüsselt das globale Modell (Server Model Encoding).  
+   - Der Hash des globalen Modells wird auf der Blockchain gespeichert.  
+   - Das verschlüsselte Modell geht an validierte Clients.   
+
+3. Lokales Training  
+   - Jeder Client trainiert das Modell lokal mit seinen eigenen (sensiblen) Daten. Diese Daten verlassen nie das Gerät bzw. die Organisation. :contentReference[oaicite:35]{index=35}  
+
+4. Client-Validierung  
+   - Der Client muss beweisen, dass er ehrlich trainiert hat, auf den richtigen Daten, mit den vorgegebenen Parametern.  
+   - Bösartige Clients werden blockiert.   
+
+5. Aggregation  
+   - Nur bestätigte Clients werden in FedAvg aufgenommen.  
+   - Das neue globale Modell wird berechnet.  
+   - Der neue Modell-Hash wird wieder on-chain dokumentiert.   
+
+6. Nächste Runde  
+   - Das aktualisierte Modell wird erneut verschlüsselt verteilt.  
+   - Zyklus wiederholt sich.   
+
+---
+
+## Tech-Stack
+
+- Python: Implementierung von Client, Gateway-Server, Aggregate-Server  
+- TensorFlow: CNN-Modell (MNIST-Klassifikation, aus PyTorch-Literatur portiert) :contentReference[oaicite:39]{index=39}  
+- Kryptographie:
+  - RSA (asymmetrisch, Schlüsselaustausch, Identitätsprüfung)  
+  - AES (symmetrisch, CFB-Modus für verschlüsselte Kommunikation)  
+  - Fernet (AES-CBC + HMAC, für Modellverschlüsselung)  
+  - SHA-256 / SHA3-256 (Integritätssicherung durch Hashes)   
+- Ethereum Smart Contracts:
+  - Teilnehmerregistrierung  
+  - Stake-Verwaltung  
+  - Dokumentation von Modell-Hashes, Beiträgen und Zuständen pro Runde   
+- Optional GUI für den Client: zur Registrierung und Statusanzeige.   
+
+---
+
+## Mögliche nächste Schritte
+
+- Individuelle Decode Keys pro Client bei der Modellverteilung, um Leaks eindeutig rückverfolgen zu können.   
+- Test mit realen, nicht-IID verteilten Daten aus echten Domänen (z. B. mehrere Krankenhäuser mit stark unterschiedlicher Datenlage).   
+- Automatische Slashing-Logik (Stake-Verlust) im Smart Contract bei nachgewiesener Manipulation. :contentReference[oaicite:45]{index=45}  
+- Einsatz auf echten sicherheitsrelevanten Daten (z. B. Intrusion Detection im Netzwerkverkehr), nicht nur MNIST.   
+
+---
+
+## TL;DR
+
+SickurityFLee kombiniert Föderiertes Lernen mit Blockchain, Kryptographie, Identitätsmanagement und ökonomischen Anreizen.  
+Das System sorgt dafür, dass nur überprüfte, nachvollziehbare und ehrliche Modell-Updates in die Aggregation einfließen. Auf diese Weise bleibt das globale Modell auch unter aktiven Poisoning-/Label-Flipping-Angriffen stabil, ohne dass sensible Trainingsdaten jemals geteilt werden müssen. 
+
+
 Entwicklung einer Architektur zum Federated Learning zur Verhinderung von Datenmanipulation
 
 
